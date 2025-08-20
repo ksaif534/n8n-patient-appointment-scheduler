@@ -1,0 +1,239 @@
+{
+  "name": "Patient Appointment Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        16,
+        -192
+      ],
+      "id": "cd6d6bfa-e6c4-437c-aa11-d273812cbf09",
+      "name": "When chat message received",
+      "webhookId": "baea4aa6-cb4c-4c3d-969a-e96fab1dd209"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "=# Role\nYou are a scheduling assistant for a medical chamber. Your role is to help patients schedule an appointment /event in the doctor's calendar.\n\n# Instructions\nFollow the steps below to book an appointment/event for the patient:\n\n1. Ask the patient for their preferred appointment/event day.\n\n2. Use the check_calendar_availability tool to identify free time slots for the patient-specified day.\n\n3. Show the patients avialable time slots for their preferred day & get from the patient time slot they would like to book an appointment for. If there are no time slots available for the day, start from step 1 again & ask the patient for a new day preference.\n\n4. Ask the patient the information that you require to book the calendar appointment. You need the patient's full name & email.\n\n5. Use the create_calendar_appointment tool to book the appointment for the patient, using details captured from step 4.\n\n6. Once the appointment is booked, notify the patient with relevant details about the appointment using the send_mail_notification tool. Notify the patient if it is not possible to create the appointment.\n\n# Rules\n- Always use UTC+6 timezone when using tools or their outputs.\n\n- Don't make things up. Ask the patient a clarifying question if you need additional information to complete your task\n\n# Examples\nUse the following examples to notify the patient that you've successfully booked their appointment:\n\n<examples>\n<example>\nI have successfully booked your appointment. Here are the details:\n\n**Date & Time**: 15:30 on Tuesday,29 July,2025\n**Email for booking**: john@doe.com\nIf you need to cancel your appointment,please call +8801718432571\n</example>\n\n<example>\nI have successfully booked your appointment. Here are the details:\n\n**Date & Time**: 9.45 on Wednesday,6 August,2025\n**Email for booking**: kawkab@gmail.com\nIf you need to cancel your appointment,please call +8801718432571\n</example>\n</examples>\n\n# Additional Context\n- The date & time right now is {{ $now }}\n- The medical chamber is called 'SK Clinic'\n- The medical chamber's phone number is +8801718432571"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.1,
+      "position": [
+        512,
+        -192
+      ],
+      "id": "81169fc1-a760-4e92-bfcb-901cb186f5fb",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        48,
+        96
+      ],
+      "id": "b80e64ed-6f09-44d8-9bbf-60e44bf12cfc",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "04xdUe4BfcgkG4r5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "=Use this check_calendar_availability tool to fetch existing events for a specified period & determine whether there are available time slots of required event length that can accomodate a new event.\n\n# Instructions\n1. Specify the Date & Range - to fetch events for a specific day, set eventsAfter to 8.59 & eventsBefore to 18.01 of the same day(adjust these times if needed).\n\n2. Divide Entire Time Period Into 30 Minute Slots - Divide the range of (eventsAfter -> eventsBefore) into 30 minute slots each.\n\n3. Retrieve Existing Events - The tool will return all events within the specified date & time range.\n\n4. Calculate Available Slots - Once you have the existing events, calculate the gaps between them to find potential availability. Ensure each gap is at least as long as the required event length. Do not allow any overlap between existing events.\n\nBy following these steps, you can accurately find valid event slots based on the already booked events.",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "59f7f19b0ed2344b80bfb2653b4912cff152bcdb1d6a5e2274e9ffd55152bfb2@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Test n8n Calendar"
+        },
+        "timeMin": "={{ $fromAI('eventsAfter','Returns events after this date time, use 2025-07-22T00:00:00') }}",
+        "timeMax": "={{ $fromAI('eventsBefore','Returns events before this date time, use 2025-07-22T00:00:00') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        80
+      ],
+      "id": "c5f0c818-403e-4aff-bc62-3bfc6b1bbbff",
+      "name": "check_calendar_availability",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "rYRVNdlx6fDsVYXz",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        272,
+        96
+      ],
+      "id": "335b3f14-7328-44f8-ba85-312ab55da2b2",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "=use this create_calendar_appointment tool to create an event in Google Calendar.",
+        "calendar": {
+          "__rl": true,
+          "value": "59f7f19b0ed2344b80bfb2653b4912cff152bcdb1d6a5e2274e9ffd55152bfb2@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Test n8n Calendar"
+        },
+        "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', ``, 'string') }}",
+        "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', ``, 'string') }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('attendees0_Attendees', ``, 'string') }}"
+          ],
+          "description": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Description', ``, 'string') }}",
+          "guestsCanInviteOthers": true,
+          "guestsCanSeeOtherGuests": true,
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        80
+      ],
+      "id": "4505406c-447a-41b6-9d4c-b2edbc57b20b",
+      "name": "create_calendar_appointment",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "rYRVNdlx6fDsVYXz",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "=use this tool to send the confirmation notification to the patient.\n\n# Instructions\n1. Use the fullname and email obtained from the patient to write the confirmation message.\n\n# Examples\nUse the following examples to notify the patient that you've successfully booked their appointment:\n\n<examples>\n<example>\nI have successfully booked your appointment. Here are the details:\n\n**Date & Time**: 15:30 on Tuesday,29 July,2025\n**Email for booking**: john@doe.com\nIf you need to cancel your appointment,please call +8801718432571\n</example>\n\n<example>\nI have successfully booked your appointment. Here are the details:\n\n**Date & Time**: 9.45 on Wednesday,6 August,2025\n**Email for booking**: kawkab@gmail.com\nIf you need to cancel your appointment,please call +8801718432571\n</example>\n</examples>",
+        "authentication": "webhook",
+        "content": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Message', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discordTool",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        80
+      ],
+      "id": "795dd1b7-e0a9-4a37-9d1a-97b5b3eaf150",
+      "name": "Discord",
+      "webhookId": "66216f2a-d4b0-4e8f-837e-cd77fde7670f",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "PADdkB0qtoXcVZyA",
+          "name": "Discord Webhook account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_calendar_availability": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_calendar_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4f56fda1-d441-4553-8b6b-3b2d14e3cb2a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "377678d3e049bd421d156dcedd6399e1db57ae525429b757f46cef9e27b32b92"
+  },
+  "id": "wGZD6EPW91y8IpbV",
+  "tags": []
+}
